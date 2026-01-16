@@ -1,0 +1,57 @@
+name: Deploy Application
+
+on: 
+  workflow_run: 
+    workflows: ["Build and Push Docker Image"]
+    types: 
+      - completed
+
+jobs:
+  deploy:
+    name: Deploy Application
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Deploy 
+        run: |
+          pwd && ls
+          cd deployments
+          docker-compose down || true
+          docker-compose pull
+          docker-compose up -d
+
+  dast:
+    needs: deploy
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run ZAP DAST Scan
+        run: |
+
+          docker run  -v $(pwd):/zap/wrk -t ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+            -t https://user-registration-system.lptdevops.website \
+            -r dast-zap-report.html \
+            -J dast-zap-report.json || true
+
+          pwd
+          ls
+
+      - name: Upload ZAP HTML Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dast-zap-html-report
+          path: dast-zap-report.html
+          retention-days: 7
+
+      - name: Upload ZAP JSON Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dast-zap-json-report
+          path: dast-zap-report.json
+          retention-days: 7

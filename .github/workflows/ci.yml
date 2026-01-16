@@ -1,0 +1,151 @@
+name: Build and Push Docker Image
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+jobs:
+  secret-scan: 
+    runs-on: self-hosted
+    steps:
+    - name: Install gitleaks
+      run: sudo apt update && sudo apt install gitleaks
+
+    - name: Run Gitleaks Secret Scan
+      run: |
+        gitleaks detect \
+        --source="./" \
+        --verbose \
+        --log-opts="--all" \
+        --report-format=json \
+        --report-path=secret-scan-gitleak-report.json || true
+
+    # --- NEW: Upload JSON report ---
+    - name: Upload Gitleaks JSON Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: secret-scan-gitleak-report
+        path: secret-scan-gitleak-report.json
+        retention-days: 7   # bạn có thể đổi
+  sast:
+    needs: secret-scan
+    runs-on: self-hosted
+
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v4
+
+    - name: Install Snyk and snyk-to-html
+      run: sudo npm install -g snyk snyk-to-html
+
+    - name: Authenticate Snyk
+      run: snyk auth ${{ secrets.KEY_ACCESS_SNYK }}
+
+    - name: Run Snyk Code Scan
+      run: snyk code test --json > sast-snyk-report.json || true
+
+    - name: Convert Snyk Report to HTML
+      run: cat sast-snyk-report.json | snyk-to-html -o sast-snyk-report.html || true
+
+    # --- NEW: Upload JSON report ---
+    - name: Upload Snyk JSON Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: snyk-sast-json-report
+        path: sast-snyk-report.json
+        retention-days: 7   # bạn có thể đổi
+
+    # --- NEW: Upload HTML report ---
+    - name: Upload Snyk HTML Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: snyk-sast-html-report
+        path: sast-snyk-report.html
+        retention-days: 7   # bạn có thể đổi
+
+  sca:
+    needs: sast
+    runs-on: self-hosted
+
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v4
+
+    - name: Install Snyk and snyk-to-html
+      run: sudo npm install -g snyk snyk-to-html
+
+    - name: Authenticate Snyk
+      run: snyk auth ${{ secrets.KEY_ACCESS_SNYK }}
+
+    - name: Run Snyk Code Scan
+      run: snyk test --json > sca-snyk-report.json || true
+
+    - name: Convert Snyk Report to HTML
+      run: cat sca-snyk-report.json | snyk-to-html -o sca-snyk-report.html || true
+
+    # --- NEW: Upload JSON report ---
+    - name: Upload Snyk JSON Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: snyk-sca-json-report
+        path: sca-snyk-report.json
+        retention-days: 7   # bạn có thể đổi
+
+    # --- NEW: Upload HTML report ---
+    - name: Upload Snyk HTML Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: snyk-sca-html-report
+        path: sca-snyk-report.html
+        retention-days: 7   # bạn có thể đổi
+
+  call_build_and_push:
+    needs: sca
+    uses: ./.github/workflows/build_and_push.yml
+    with:
+      service_name: 'user-registration-system-fe'
+      dockerfile_path: 'Dockerfile'
+      context_path: './'
+    secrets: 
+      DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
+      DOCKERHUB_PASS: ${{ secrets.DOCKERHUB_PASS }}
+
+
+  image-scan:
+    needs: call_build_and_push
+    runs-on: self-hosted
+
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v4
+
+    - name: Install Snyk and snyk-to-html
+      run: sudo npm install -g snyk snyk-to-html
+
+    - name: Authenticate Snyk
+      run: snyk auth ${{ secrets.KEY_ACCESS_SNYK }}
+
+    - name: Run Snyk Code Scan
+      run: snyk container test --json ${{ secrets.DOCKERHUB_USER }}/user-registration-system-fe:latest > image-snyk-report.json || true
+
+    - name: Convert Snyk Report to HTML
+      run: cat image-snyk-report.json | snyk-to-html -o image-snyk-report.html || true
+
+    # --- NEW: Upload JSON report ---
+    - name: Upload Snyk JSON Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: snyk-image-json-report
+        path: image-snyk-report.json
+        retention-days: 7   # bạn có thể đổi
+
+    # --- NEW: Upload HTML report ---
+    - name: Upload Snyk HTML Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: snyk-image-html-report
+        path: image-snyk-report.html
+        retention-days: 7   # bạn có thể đổi
+

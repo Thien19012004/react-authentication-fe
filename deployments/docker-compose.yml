@@ -1,0 +1,23 @@
+services:
+  user-registration-system-fe:
+    image: thien19012004/user-registration-system-fe:latest
+    container_name: user-registration-system-fe
+    ports:
+      - "7000:8080"
+    restart: always
+    labels:
+      - "traefik.http.routers.user-registration-system-fe-secure.rule=Host(`user-registration-system.lptdevops.website`)"
+      - "traefik.http.routers.user-registration-system-fe-secure.entrypoints=websecure"
+      - "traefik.http.routers.user-registration-system-fe-secure.tls=true"
+      - "traefik.http.routers.user-registration-system-fe-secure.tls.certresolver=leresolver"
+
+      - "traefik.http.routers.user-registration-system-fe.rule=Host(`user-registration-system.lptdevops.website`)"
+      - "traefik.http.routers.user-registration-system-fe.entrypoints=web"
+      - "traefik.http.routers.user-registration-system-fe.middlewares=redirect-to-https"  
+      - "traefik.http.services.user-registration-system-fe.loadbalancer.server.port=8080"
+    networks:
+      - PrviNetwork
+
+networks:
+  PrviNetwork:
+    external: true
