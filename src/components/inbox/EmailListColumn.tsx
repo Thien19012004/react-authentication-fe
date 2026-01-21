@@ -28,7 +28,92 @@ import {
 import { SCROLL_LOAD_THRESHOLD } from '../../constants/constants.email';
 import { MailIcon } from './MailIcon';
 
+export function EmailListColumn({
+  emails,
+  isLoading,
+  isFetching,
+  hasMore,
+  onLoadMore,
+  selectedEmails,
+  onSelectEmail,
+  onToggleSelect,
+  onSelectAll,
+  onMarkRead,
+  onMarkUnread,
+  onDeleteSelected,
+  onStarToggle,
+  actionsDisabled,
+  activeEmailId,
+  compact,
+  onCompose,
+}: {
+  emails: EmailListItem[];
+  isLoading: boolean;
+  isFetching: boolean;
+  hasMore: boolean;
+  onLoadMore: () => void;
+  selectedEmails: string[];
+  onSelectEmail: (id: string) => void;
+  onToggleSelect: (id: string) => void;
+  onSelectAll: () => void;
+  onMarkRead: () => void;
+  onMarkUnread: () => void;
+  onDeleteSelected: () => void;
+  onStarToggle: (emailId: string, starred: boolean) => void;
+  actionsDisabled: boolean;
+  activeEmailId: string | null;
+  compact?: boolean;
+  onCompose?: () => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const emailRefs = useRef<Map<string, HTMLLIElement>>(new Map());
+  const [focusedIndex, setFocusedIndex] = useState(0);
+  const lastAutoScrolledEmailIdRef = useRef<string | null>(null);
+  const lastAlignedActiveEmailIdRef = useRef<string | null>(null);
+  const wasNearBottomRef = useRef(false);
+  const lastLoadMoreAtRef = useRef<number>(0);
 
+  /**
+   * Keyboard navigation handlers
+   */
+  useKeyboardNavigation({
+    enabled: !isLoading && emails.length > 0,
+    handlers: {
+      NEXT_EMAIL: () => {
+        setFocusedIndex((prev) => Math.min(prev + 1, emails.length - 1));
+      },
+      PREV_EMAIL: () => {
+        setFocusedIndex((prev) => Math.max(prev - 1, 0));
+      },
+      OPEN_EMAIL: () => {
+        if (emails[focusedIndex]) {
+          onSelectEmail(emails[focusedIndex].id);
+        }
+      },
+    },
+  });
+
+  /**
+   * Auto-scroll focused email into view
+   */
+  useEffect(() => {
+    const focusedEmail = emails[focusedIndex];
+    if (!focusedEmail) return;
+
+    // IMPORTANT: avoid re-scrolling on every email page append.
+    // When `emails` changes (infinite load), re-running scrollIntoView can create
+    // a feedback loop: scroll -> load more -> emails change -> scrollIntoView -> scroll...
+    if (lastAutoScrolledEmailIdRef.current === focusedEmail.id) return;
+    lastAutoScrolledEmailIdRef.current = focusedEmail.id;
+
+    const element = emailRefs.current.get(focusedEmail.id);
+    element?.scrollIntoView({
+      block: 'nearest',
+      // Use non-animated scrolling to prevent continuous smooth scrolling
+      // during pagination updates.
+      behavior: 'auto',
+    });
+  }, [focusedIndex]);
 
   // NOTE: we intentionally do NOT reset `wasNearBottomRef` when fetching completes.
   // If the user remains at the bottom, resetting would allow another immediate
